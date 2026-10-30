@@ -33,8 +33,10 @@ func emitOK() error {
 type Author struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
-	Bot  bool   `json:"bot"`
+	Bot  bool   `json:"bot,omitzero"`
 }
+
+func toAuthor(u *discordgo.User) Author { return Author{ID: u.ID, Name: u.Username, Bot: u.Bot} }
 
 type Attachment struct {
 	Filename string `json:"filename"`
@@ -44,19 +46,21 @@ type Attachment struct {
 type Reaction struct {
 	Emoji string `json:"emoji"`
 	Count int    `json:"count"`
+	Me    bool   `json:"me,omitzero"` // the bot itself is one of Count
 }
 
+// Message omits empty fields to keep output small in an AI's context.
 type Message struct {
 	ID              string       `json:"id"`
-	ChannelID       string       `json:"channel_id"`
+	ChannelID       string       `json:"channel_id,omitzero"`
 	Author          Author       `json:"author"`
 	Timestamp       time.Time    `json:"timestamp"`
-	EditedTimestamp *time.Time   `json:"edited_timestamp"`
+	EditedTimestamp *time.Time   `json:"edited_timestamp,omitzero"`
 	Content         string       `json:"content"`
-	Attachments     []Attachment `json:"attachments"`
-	ReplyTo         *string      `json:"reply_to"`
-	Reactions       []Reaction   `json:"reactions"`
-	Fallback        string       `json:"fallback,omitempty"`
+	Attachments     []Attachment `json:"attachments,omitzero"`
+	ReplyTo         string       `json:"reply_to,omitzero"`
+	Reactions       []Reaction   `json:"reactions,omitzero"`
+	Fallback        string       `json:"fallback,omitzero"`
 }
 
 func toMessage(m *discordgo.Message) Message {
@@ -68,16 +72,16 @@ func toMessage(m *discordgo.Message) Message {
 		Content:         m.Content,
 	}
 	if m.Author != nil {
-		out.Author = Author{ID: m.Author.ID, Name: m.Author.Username, Bot: m.Author.Bot}
+		out.Author = toAuthor(m.Author)
 	}
 	for _, a := range m.Attachments {
 		out.Attachments = append(out.Attachments, Attachment{Filename: a.Filename, URL: a.URL})
 	}
 	if m.MessageReference != nil {
-		out.ReplyTo = &m.MessageReference.MessageID
+		out.ReplyTo = m.MessageReference.MessageID
 	}
 	for _, r := range m.Reactions {
-		out.Reactions = append(out.Reactions, Reaction{Emoji: r.Emoji.APIName(), Count: r.Count})
+		out.Reactions = append(out.Reactions, Reaction{Emoji: r.Emoji.APIName(), Count: r.Count, Me: r.Me})
 	}
 	return out
 }

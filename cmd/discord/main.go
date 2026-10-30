@@ -41,7 +41,7 @@ func main() {
 func newParser() (*kong.Kong, error) {
 	return kong.New(&CLI{},
 		kong.Name("discord"),
-		kong.Description("Minimal Discord CLI. Output is JSON Lines."),
+		kong.Description("Minimal Discord CLI. Output is JSON Lines; empty fields are omitted."),
 	)
 }
 

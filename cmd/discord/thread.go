@@ -18,8 +18,8 @@ type Thread struct {
 	ParentID     string `json:"parent_id"`
 	OwnerID      string `json:"owner_id"`
 	MessageCount int    `json:"message_count"`
-	Archived     bool   `json:"archived"`
-	Fallback     string `json:"fallback,omitempty"`
+	Archived     bool   `json:"archived,omitzero"`
+	Fallback     string `json:"fallback,omitzero"`
 }
 
 func toThread(c *discordgo.Channel) Thread {

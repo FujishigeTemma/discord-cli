@@ -7,20 +7,16 @@ type ChannelCmd struct {
 }
 
 type Channel struct {
-	ID       string  `json:"id"`
-	Name     string  `json:"name"`
-	Type     string  `json:"type"`
-	ParentID *string `json:"parent_id"`
-	Position int     `json:"position"`
-	Topic    string  `json:"topic,omitempty"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	ParentID string `json:"parent_id,omitzero"`
+	Position int    `json:"position"`
+	Topic    string `json:"topic,omitzero"`
 }
 
 func toChannel(c *discordgo.Channel) Channel {
-	out := Channel{ID: c.ID, Name: c.Name, Type: channelType(c.Type), Position: c.Position, Topic: c.Topic}
-	if c.ParentID != "" {
-		out.ParentID = &c.ParentID
-	}
-	return out
+	return Channel{ID: c.ID, Name: c.Name, Type: channelType(c.Type), ParentID: c.ParentID, Position: c.Position, Topic: c.Topic}
 }
 
 type ChannelListCmd struct{}

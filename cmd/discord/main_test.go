@@ -85,7 +85,7 @@ func run(t *testing.T, fake *fakeDiscord, input string, args ...string) ([]map[s
 
 func msg(id, content, ts string) string {
 	return `{"id":"` + id + `","channel_id":"c1","content":"` + content + `","timestamp":"` + ts +
-		`","author":{"id":"u1","username":"alice","bot":false},"attachments":[],"reactions":[{"count":2,"emoji":{"id":"9","name":"party"}}],"message_reference":{"message_id":"m0"}}`
+		`","author":{"id":"u1","username":"alice","bot":false},"attachments":[],"reactions":[{"count":2,"me":true,"emoji":{"id":"9","name":"party"}}],"message_reference":{"message_id":"m0"}}`
 }
 
 func TestMessageListOldestFirst(t *testing.T) {
@@ -100,10 +100,15 @@ func TestMessageListOldestFirst(t *testing.T) {
 	if len(lines) != 3 || lines[0]["id"] != "m1" || lines[2]["id"] != "m3" {
 		t.Fatalf("wrong order: %v", lines)
 	}
+	for _, k := range []string{"channel_id", "edited_timestamp", "attachments"} {
+		if _, ok := lines[0][k]; ok {
+			t.Errorf("%s should be omitted: %v", k, lines[0])
+		}
+	}
 	if lines[0]["reply_to"] != "m0" {
 		t.Errorf("reply_to = %v", lines[0]["reply_to"])
 	}
-	if r := lines[0]["reactions"].([]any)[0].(map[string]any); r["emoji"] != "party:9" {
+	if r := lines[0]["reactions"].([]any)[0].(map[string]any); r["emoji"] != "party:9" || r["me"] != true {
 		t.Errorf("emoji = %v", r["emoji"])
 	}
 }
@@ -273,5 +278,18 @@ func TestTextThreadCreateSendsFirstMessage(t *testing.T) {
 	delete(fake.responses, "POST /channels/c1/threads")
 	if _, err := run(t, fake, "", "thread", "create", "c1", "--name", "topic"); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestReactionList(t *testing.T) {
+	fake := &fakeDiscord{responses: map[string]string{
+		"GET /channels/c1/messages/m1/reactions/%F0%9F%91%8D": `[{"id":"u1","username":"alice"},{"id":"b1","username":"bot","bot":true}]`,
+	}}
+	lines, err := run(t, fake, "", "reaction", "list", "c1", "m1", "👍")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lines) != 2 || lines[0]["name"] != "alice" || lines[1]["bot"] != true {
+		t.Fatalf("lines = %v", lines)
 	}
 }

@@ -2,7 +2,7 @@
 
 AIエージェントから使うための、ミニマルなDiscord CLIです。対象は1つのサーバーだけです。
 
-- 標準出力は常に JSON Lines（1行に1オブジェクト）
+- 標準出力は常に JSON Lines（1行に1オブジェクト）。空の値は省略します
 - エラーは標準エラー出力に `{"error":"...","status":403}` を出し、終了コード1で終了
 - REST APIだけを使い、Gatewayには接続しません
 
@@ -61,6 +61,7 @@ discord message send   <channel_id> [--text TEXT | --stdin] [--file PATH]... [--
 discord message edit   <channel_id> <message_id> (--text TEXT | --stdin)
 discord message delete <channel_id> <message_id>
 
+discord reaction list   <channel_id> <message_id> <emoji>
 discord reaction add    <channel_id> <message_id> <emoji>
 discord reaction remove <channel_id> <message_id> <emoji>
 ```
@@ -71,12 +72,14 @@ discord reaction remove <channel_id> <message_id> <emoji>
 - `message edit` は2000文字を超えるとエラーになります。
 - `thread create` をフォーラムチャンネルに対して使う場合は `--text` か `--stdin` が必須です。
 - 絵文字は `👍` か、カスタム絵文字の `name:id` で指定します。
+- メッセージの `reactions[].me` は、Bot自身もそのリアクションを付けているかを表します（`count` にBotの分が含まれます）。
+- `reaction list` は、そのリアクションを付けたユーザーを1行に1人ずつ `{"id","name","bot"}` で出します（最大100人）。
 - サブコマンドを省略するか、存在しないサブコマンドを指定すると、ヘルプを表示して終了コード0で終了します。
 
 ## 出力例
 
 ```json
-{"id":"1300","channel_id":"1200","author":{"id":"1100","name":"alice","bot":false},"timestamp":"2026-10-30T12:00:00Z","edited_timestamp":null,"content":"hello","attachments":[],"reply_to":null,"reactions":[{"emoji":"👍","count":1}]}
+{"id":"1300","author":{"id":"1100","name":"alice"},"timestamp":"2026-10-30T12:00:00Z","content":"hello","reactions":[{"emoji":"👍","count":1}]}
 ```
 
 ## 開発

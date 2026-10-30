@@ -35,7 +35,7 @@ func (t TextInput) read() (string, error) {
 }
 
 type MessageCmd struct {
-	List   MessageListCmd   `cmd:"" help:"List messages, oldest first."`
+	List   MessageListCmd   `cmd:"" help:"List messages, oldest first. To read only new messages, remember the last ID and pass it as --after next time."`
 	Get    MessageGetCmd    `cmd:"" help:"Get one message."`
 	Send   MessageSendCmd   `cmd:"" help:"Send a message. Text over 2000 characters is sent as message.txt."`
 	Edit   MessageEditCmd   `cmd:"" help:"Edit a message sent by the bot."`
@@ -68,7 +68,9 @@ func (c *MessageListCmd) Run() error {
 	}
 	slices.Reverse(ms) // the API returns newest first
 	for _, m := range ms {
-		if err := emit(toMessage(m)); err != nil {
+		out := toMessage(m)
+		out.ChannelID = "" // same on every line; it is the argument
+		if err := emit(out); err != nil {
 			return err
 		}
 	}
