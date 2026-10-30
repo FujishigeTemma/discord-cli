@@ -17,7 +17,7 @@ type Thread struct {
 	Type         string `json:"type"`
 	ParentID     string `json:"parent_id"`
 	OwnerID      string `json:"owner_id"`
-	MessageCount int    `json:"message_count"`
+	MessageCount int    `json:"message_count,omitzero"`
 	Archived     bool   `json:"archived,omitzero"`
 	Fallback     string `json:"fallback,omitzero"`
 }
