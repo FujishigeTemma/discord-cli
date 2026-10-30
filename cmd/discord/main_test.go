@@ -92,7 +92,7 @@ func run(t *testing.T, fake *fakeDiscord, input string, args ...string) ([]map[s
 		err = runCommand(ctx)
 	}
 	var lines []map[string]any
-	for _, l := range strings.Split(strings.TrimSpace(out.String()), "\n") {
+	for l := range strings.SplitSeq(strings.TrimSpace(out.String()), "\n") {
 		if l == "" {
 			continue
 		}

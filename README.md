@@ -12,10 +12,10 @@ AIエージェントから使うための、ミニマルなDiscord CLIです。�
 nix profile install github:FujishigeTemma/discord-cli
 ```
 
-Nixを使わない場合は、Go 1.26以上で次を実行します（`encoding/json/v2` を使うため `GOEXPERIMENT=jsonv2` が必要です）。
+Nixを使わない場合は、Go 1.27以上で次を実行します。
 
 ```bash
-GOEXPERIMENT=jsonv2 go install github.com/FujishigeTemma/discord-cli/cmd/discord@latest
+go install github.com/FujishigeTemma/discord-cli/cmd/discord@latest
 ```
 
 ## Botの作成
@@ -93,7 +93,7 @@ discord reaction remove <channel_id> <message_id> <emoji>
 ## 開発
 
 ```bash
-direnv allow     # または nix develop（GOEXPERIMENT=jsonv2 も設定されます）
+direnv allow     # または nix develop
 go test ./...
 ```
 

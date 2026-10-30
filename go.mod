@@ -1,6 +1,6 @@
 module github.com/FujishigeTemma/discord-cli
 
-go 1.26.10
+go 1.27.3
 
 require (
 	github.com/alecthomas/kong v1.16.1
