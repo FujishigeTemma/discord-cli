@@ -36,6 +36,7 @@ func (t TextInput) read() (string, error) {
 
 type MessageCmd struct {
 	List   MessageListCmd   `cmd:"" help:"List messages, oldest first. Without a cursor, returns the latest N. To read only new messages, pass the last seen ID as --after next time. Mentions appear as <@name>. Attachments are filenames; fetch them with attachment download."`
+	Watch  MessageWatchCmd  `cmd:"" help:"Wait for new messages and print each as it arrives, oldest first. Starts from now and skips the bot's own messages. Polls the REST API. Ends after --max messages or --timeout, printing nothing if none came (exit 0)."`
 	Get    MessageGetCmd    `cmd:"" help:"Get one message."`
 	Send   MessageSendCmd   `cmd:"" help:"Send a message and print its id. Text over 2000 characters is sent as message.txt."`
 	Edit   MessageEditCmd   `cmd:"" help:"Replace the text of a message sent by the bot and print its id."`

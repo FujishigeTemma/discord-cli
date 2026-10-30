@@ -4,7 +4,7 @@ AIエージェントから使うための、ミニマルなDiscord CLIです。�
 
 - 標準出力は常に JSON Lines（1行に1オブジェクト）。空の値は省略します
 - エラーは標準エラー出力に `{"error":"...","status":403}` を出し、終了コード1で終了
-- REST APIだけを使い、Gatewayには接続しません
+- REST APIだけを使い、Gatewayには接続しません（`message watch` もポーリングです）
 
 ## インストール
 
@@ -58,6 +58,7 @@ discord thread list    [--channel CHANNEL_ID]
 discord thread create  <channel_id> --name NAME [--message MESSAGE_ID] [--text TEXT | --stdin]
 
 discord message list   <channel_id> [--limit N] [--before ID | --after ID | --around ID]
+discord message watch  <channel_id> [--after ID] [--interval 3s] [--timeout DURATION] [--max N] [--include-self]
 discord message get    <channel_id> <message_id>
 discord message send   <channel_id> [--text TEXT | --stdin] [--file PATH]... [--reply-to MESSAGE_ID] [--mention NAME]...
 discord message edit   <channel_id> <message_id> (--text TEXT | --stdin)
@@ -72,6 +73,8 @@ discord reaction remove <channel_id> <message_id> <emoji>
 
 - スレッドIDはチャンネルIDとして `message` / `reaction` 系のコマンドにそのまま渡せます。
 - `message list` は古い順に出力します。`--limit` は1〜100で、デフォルトは50です。
+- `message watch` は新着メッセージを届いた順に1行ずつ出し続けます。開始位置はデフォルトで「今」です。続きから再開するには、最後に出た `id` を `--after` に渡します。
+- `message watch` は `--max N` 件出すか `--timeout` が過ぎると終了コード0で終わります（何も来なければ出力は空）。次の1件を待つには `--max 1 --timeout 10m` のように使います。Bot自身の投稿は `--include-self` を付けない限り出しません。
 - `message send` で本文が2000文字を超えると `message.txt` として添付し、出力に `"fallback":"attachment"` を付けます。
 - `message edit` は2000文字を超えるとエラーになります。
 - `thread create` をフォーラムチャンネルに対して使う場合は `--text` か `--stdin` が必須です。

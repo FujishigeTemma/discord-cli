@@ -10,8 +10,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alecthomas/kong"
 )
@@ -26,6 +28,8 @@ type recorded struct {
 type fakeDiscord struct {
 	responses map[string]string
 	requests  []recorded
+	// handler, when set, answers first; ok=false falls back to responses.
+	handler func(r *http.Request) (resp string, ok bool)
 }
 
 func (f *fakeDiscord) RoundTrip(r *http.Request) (*http.Response, error) {
@@ -36,6 +40,11 @@ func (f *fakeDiscord) RoundTrip(r *http.Request) (*http.Response, error) {
 	path := strings.TrimPrefix(r.URL.EscapedPath(), "/api/v9")
 	f.requests = append(f.requests, recorded{path, body, r.Header})
 	resp, ok := f.responses[r.Method+" "+path]
+	if f.handler != nil {
+		if hr, hok := f.handler(r); hok {
+			resp, ok = hr, true
+		}
+	}
 	status := 200
 	if !ok {
 		status, resp = 404, `{"message":"Unknown Message","code":10008}`
@@ -397,5 +406,69 @@ func TestAttachmentDownloadSameNames(t *testing.T) {
 	b, _ := os.ReadFile(lines[1]["path"].(string))
 	if string(a) != "one" || string(b) != "two" {
 		t.Errorf("got %q and %q", a, b)
+	}
+}
+
+func TestWatchSkipsSelfAndAdvancesCursor(t *testing.T) {
+	polls := map[string]string{
+		"m0": "[" + msg("m2", "b", "2026-01-02T00:00:00Z") + "," + msg("m1", "a", "2026-01-01T00:00:00Z") + "]",
+		"m2": "[]",
+		"m3": "[" + strings.Replace(msg("m4", "mine", "2026-01-04T00:00:00Z"), `"id":"u1"`, `"id":"bot1"`, 1) + "]",
+		"m4": "[" + msg("m5", "c", "2026-01-05T00:00:00Z") + "]",
+	}
+	var cursors []string
+	fake := &fakeDiscord{
+		responses: map[string]string{"GET /users/@me": `{"id":"bot1","username":"bot","bot":true}`},
+		handler: func(r *http.Request) (string, bool) {
+			if r.URL.Path != "/api/v9/channels/c1/messages" {
+				return "", false
+			}
+			after := r.URL.Query().Get("after")
+			cursors = append(cursors, after)
+			if after == "m2" { // a new message shows up on the next poll
+				polls["m2"] = "[" + msg("m3", "x", "2026-01-03T00:00:00Z") + "]"
+			}
+			return polls[after], true
+		},
+	}
+	lines, err := run(t, fake, "", "message", "watch", "c1", "--after", "m0", "--interval", "1ms", "--max", "4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, l := range lines {
+		ids = append(ids, l["id"].(string))
+		if _, ok := l["channel_id"]; ok {
+			t.Errorf("channel_id should be omitted: %v", l)
+		}
+	}
+	if strings.Join(ids, ",") != "m1,m2,m3,m5" {
+		t.Fatalf("got %v, want m1,m2,m3,m5 (m4 is the bot's own)", ids)
+	}
+	if strings.Join(cursors, ",") != "m0,m2,m3,m4" {
+		t.Fatalf("cursors %v", cursors)
+	}
+}
+
+func TestWatchTimeoutPrintsNothing(t *testing.T) {
+	now = func() time.Time { return time.UnixMilli(discordEpoch + 1000) }
+	defer func() { now = time.Now }()
+	var after string
+	fake := &fakeDiscord{
+		responses: map[string]string{"GET /users/@me": `{"id":"bot1","username":"bot","bot":true}`},
+		handler: func(r *http.Request) (string, bool) {
+			if r.URL.Path != "/api/v9/channels/c1/messages" {
+				return "", false
+			}
+			after = r.URL.Query().Get("after")
+			return "[]", true
+		},
+	}
+	lines, err := run(t, fake, "", "message", "watch", "c1", "--interval", "5ms", "--timeout", "30ms")
+	if err != nil || len(lines) != 0 {
+		t.Fatalf("lines=%v err=%v", lines, err)
+	}
+	if want := strconv.Itoa(1000 << 22); after != want {
+		t.Fatalf("default start after=%q, want %q (now)", after, want)
 	}
 }
