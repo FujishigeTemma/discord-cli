@@ -11,11 +11,12 @@ import (
 )
 
 type CLI struct {
-	Auth     AuthCmd     `cmd:"" help:"Manage the bot token."`
-	Channel  ChannelCmd  `cmd:"" help:"Channels in the server."`
-	Thread   ThreadCmd   `cmd:"" help:"Threads in the server."`
-	Message  MessageCmd  `cmd:"" help:"Read and write messages."`
-	Reaction ReactionCmd `cmd:"" help:"Add or remove reactions."`
+	Auth       AuthCmd       `cmd:"" help:"Manage the bot token."`
+	Channel    ChannelCmd    `cmd:"" help:"Channels in the server."`
+	Thread     ThreadCmd     `cmd:"" help:"Threads in the server."`
+	Message    MessageCmd    `cmd:"" help:"Read and write messages."`
+	Reaction   ReactionCmd   `cmd:"" help:"List, add or remove reactions."`
+	Attachment AttachmentCmd `cmd:"" help:"Download attachments."`
 }
 
 func main() {
@@ -33,9 +34,19 @@ func main() {
 		}
 		fail(err)
 	}
-	if err := ctx.Run(); err != nil {
+	if err := runCommand(ctx); err != nil {
 		fail(err)
 	}
+}
+
+func runCommand(ctx *kong.Context) error {
+	if err := ctx.Run(); err != nil {
+		return err
+	}
+	// Best effort: the command already succeeded, so a cache write error
+	// must not turn it into a failure (an agent might retry and double-post).
+	_ = saveSeenUsers()
+	return nil
 }
 
 func newParser() (*kong.Kong, error) {

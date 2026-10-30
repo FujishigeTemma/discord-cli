@@ -8,6 +8,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -49,11 +50,23 @@ func (f *fakeDiscord) RoundTrip(r *http.Request) (*http.Response, error) {
 	}, nil
 }
 
+// TestMain points config and cache at a temporary directory for all tests.
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "discord-cli-test")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
+	os.Setenv("XDG_CACHE_HOME", filepath.Join(dir, "cache"))
+	code := m.Run()
+	os.RemoveAll(dir)
+	os.Exit(code)
+}
+
 // run executes the CLI with args against fake and returns stdout lines.
 func run(t *testing.T, fake *fakeDiscord, input string, args ...string) ([]map[string]any, error) {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "config.json")
-	configPath = func() (string, error) { return path, nil }
+	seenUsers = map[string]string{}
 	if err := saveConfig(&Config{Token: "test-token", GuildID: "g1"}); err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +80,7 @@ func run(t *testing.T, fake *fakeDiscord, input string, args ...string) ([]map[s
 	}
 	ctx, err := parser.Parse(args)
 	if err == nil {
-		err = ctx.Run()
+		err = runCommand(ctx)
 	}
 	var lines []map[string]any
 	for _, l := range strings.Split(strings.TrimSpace(out.String()), "\n") {
@@ -291,5 +304,98 @@ func TestReactionList(t *testing.T) {
 	}
 	if len(lines) != 2 || lines[0]["name"] != "alice" || lines[1]["bot"] != true {
 		t.Fatalf("lines = %v", lines)
+	}
+}
+
+func TestMentionsByName(t *testing.T) {
+	fake := &fakeDiscord{responses: map[string]string{
+		"GET /channels/c1/messages/m1": `{"id":"m1","channel_id":"c1","content":"<@u2> hi","timestamp":"2026-01-01T00:00:00Z",
+			"author":{"id":"u1","username":"alice"},"mentions":[{"id":"u2","username":"bob"}]}`,
+		"POST /channels/c1/messages": msg("m2", "", "2026-01-01T00:00:00Z"),
+	}}
+	lines, err := run(t, fake, "", "message", "get", "c1", "m1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lines[0]["content"] != "<@bob> hi" {
+		t.Errorf("content = %v", lines[0]["content"])
+	}
+
+	// Names seen above are cached and resolve to IDs.
+	lines, err = run(t, fake, "", "message", "send", "c1", "--text", "hello", "--mention", "@bob", "--mention", "<@alice>")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]any
+	json.Unmarshal(fake.requests[len(fake.requests)-1].Body, &body)
+	if body["content"] != "<@u2> <@u1> hello" {
+		t.Errorf("content = %v", body["content"])
+	}
+	if len(lines[0]) != 1 || lines[0]["id"] != "m2" {
+		t.Errorf("send output = %v, want only id", lines[0])
+	}
+
+	if _, err := run(t, fake, "", "message", "send", "c1", "--text", "x", "--mention", "carol"); err == nil {
+		t.Error("expected unknown user error")
+	}
+}
+
+func TestAttachmentDownload(t *testing.T) {
+	fake := &fakeDiscord{responses: map[string]string{
+		"GET /channels/c1/messages/m1": `{"id":"m1","channel_id":"c1","timestamp":"2026-01-01T00:00:00Z","author":{"id":"u1","username":"alice"},
+			"attachments":[{"id":"a1","filename":"shot.png","url":"https://cdn.discordapp.com/attachments/c1/a1/shot.png?ex=1"}]}`,
+		"GET /attachments/c1/a1/shot.png": "PNGDATA",
+	}}
+	lines, err := run(t, fake, "", "message", "get", "c1", "m1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a := lines[0]["attachments"].([]any); a[0] != "shot.png" {
+		t.Errorf("attachments = %v", a)
+	}
+	lines, err = run(t, fake, "", "attachment", "download", "c1", "m1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := lines[0]["path"].(string)
+	if b, _ := os.ReadFile(path); string(b) != "PNGDATA" {
+		t.Errorf("file = %q", b)
+	}
+	if !strings.HasSuffix(path, filepath.Join("cache", "discord-cli", "attachments", "a1", "shot.png")) {
+		t.Errorf("path = %s", path)
+	}
+}
+
+func TestLongTextKeepsMentionsInContent(t *testing.T) {
+	fake := &fakeDiscord{responses: map[string]string{
+		"GET /channels/c1/messages/m1": `{"id":"m1","channel_id":"c1","timestamp":"2026-01-01T00:00:00Z","author":{"id":"u1","username":"alice"}}`,
+		"POST /channels/c1/messages":   msg("m2", "", "2026-01-01T00:00:00Z"),
+	}}
+	if _, err := run(t, fake, "", "message", "get", "c1", "m1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := run(t, fake, "", "message", "send", "c1", "--text", strings.Repeat("x", 2001), "--mention", "alice"); err != nil {
+		t.Fatal(err)
+	}
+	if body := string(fake.requests[len(fake.requests)-1].Body); !strings.Contains(body, `"content":"\u003c@u1\u003e "`) {
+		t.Errorf("mention should stay in content: %.300s", body)
+	}
+}
+
+func TestAttachmentDownloadSameNames(t *testing.T) {
+	fake := &fakeDiscord{responses: map[string]string{
+		"GET /channels/c1/messages/m1": `{"id":"m1","channel_id":"c1","timestamp":"2026-01-01T00:00:00Z","author":{"id":"u1","username":"alice"},
+			"attachments":[{"id":"a1","filename":"same.txt","url":"https://cdn.discordapp.com/x/a1"},{"id":"a2","filename":"same.txt","url":"https://cdn.discordapp.com/x/a2"}]}`,
+		"GET /x/a1": "one",
+		"GET /x/a2": "two",
+	}}
+	lines, err := run(t, fake, "", "attachment", "download", "c1", "m1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, _ := os.ReadFile(lines[0]["path"].(string))
+	b, _ := os.ReadFile(lines[1]["path"].(string))
+	if string(a) != "one" || string(b) != "two" {
+		t.Errorf("got %q and %q", a, b)
 	}
 }

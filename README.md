@@ -43,6 +43,8 @@ discord auth login     # トークンを貼り付ける（echo "$TOKEN" | discor
 discord auth status    # Botの名前とサーバー名が出れば成功
 ```
 
+キャッシュ（メンション用のユーザー名とIDの対応、ダウンロードした添付ファイル）は `$XDG_CACHE_HOME/discord-cli/`（未設定なら `~/.cache/discord-cli/`）に置きます。
+
 トークンとサーバーIDは `$XDG_CONFIG_HOME/discord-cli/config.json`（未設定なら `~/.config/discord-cli/config.json`、パーミッション 0600）に保存されます。
 
 ## コマンド
@@ -57,9 +59,11 @@ discord thread create  <channel_id> --name NAME [--message MESSAGE_ID] [--text T
 
 discord message list   <channel_id> [--limit N] [--before ID | --after ID | --around ID]
 discord message get    <channel_id> <message_id>
-discord message send   <channel_id> [--text TEXT | --stdin] [--file PATH]... [--reply-to MESSAGE_ID]
+discord message send   <channel_id> [--text TEXT | --stdin] [--file PATH]... [--reply-to MESSAGE_ID] [--mention NAME]...
 discord message edit   <channel_id> <message_id> (--text TEXT | --stdin)
 discord message delete <channel_id> <message_id>
+
+discord attachment download <channel_id> <message_id>
 
 discord reaction list   <channel_id> <message_id> <emoji>
 discord reaction add    <channel_id> <message_id> <emoji>
@@ -74,6 +78,7 @@ discord reaction remove <channel_id> <message_id> <emoji>
 - 絵文字は `👍` か、カスタム絵文字の `name:id` で指定します。
 - メッセージの `reactions[].me` は、Bot自身もそのリアクションを付けているかを表します（`count` にBotの分が含まれます）。
 - `reaction list` は、そのリアクションを付けたユーザーを1行に1人ずつ `{"id","name","bot"}` で出します（最大100人）。
+- 本文中のメンションは `<@name>` で表示します（平文の `@name` と区別するため）。メンションするには `--mention name` を使います。
 - サブコマンドを省略するか、存在しないサブコマンドを指定すると、ヘルプを表示して終了コード0で終了します。
 
 ## 出力例

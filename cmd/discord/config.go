@@ -15,17 +15,45 @@ type Config struct {
 	GuildID string `json:"guild_id"`
 }
 
-// configPath is replaced in tests.
-var configPath = func() (string, error) {
-	dir := os.Getenv("XDG_CONFIG_HOME")
+// xdgDir returns $env/discord-cli, or ~/fallback/discord-cli when env is unset.
+func xdgDir(env, fallback string) (string, error) {
+	dir := os.Getenv(env)
 	if dir == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return "", err
 		}
-		dir = filepath.Join(home, ".config")
+		dir = filepath.Join(home, fallback)
 	}
-	return filepath.Join(dir, "discord-cli", "config.json"), nil
+	return filepath.Join(dir, "discord-cli"), nil
+}
+
+func configPath() (string, error) {
+	dir, err := xdgDir("XDG_CONFIG_HOME", ".config")
+	return filepath.Join(dir, "config.json"), err
+}
+
+func cacheDir() (string, error) { return xdgDir("XDG_CACHE_HOME", ".cache") }
+
+// readJSONFile decodes path into v. A missing file returns os.ErrNotExist.
+func readJSONFile(path string, v any) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(b, v)
+}
+
+// writeJSONFile writes v to path, readable only by the user.
+func writeJSONFile(path string, v any) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	b, err := json.Marshal(v, json.Deterministic(true))
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, b, 0o600)
 }
 
 func loadConfig() (*Config, error) {
@@ -33,15 +61,12 @@ func loadConfig() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	b, err := os.ReadFile(path)
+	var c Config
+	err = readJSONFile(path, &c)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, errors.New("not logged in: run `discord auth login`")
 	}
-	if err != nil {
-		return nil, err
-	}
-	var c Config
-	return &c, json.Unmarshal(b, &c)
+	return &c, err
 }
 
 func saveConfig(c *Config) error {
@@ -49,14 +74,7 @@ func saveConfig(c *Config) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	b, err := json.Marshal(c)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, b, 0o600)
+	return writeJSONFile(path, c)
 }
 
 // httpClient is replaced in tests to point at a fake server.

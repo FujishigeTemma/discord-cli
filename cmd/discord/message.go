@@ -35,10 +35,10 @@ func (t TextInput) read() (string, error) {
 }
 
 type MessageCmd struct {
-	List   MessageListCmd   `cmd:"" help:"List messages, oldest first. To read only new messages, remember the last ID and pass it as --after next time."`
+	List   MessageListCmd   `cmd:"" help:"List messages, oldest first. Without a cursor, returns the latest N. To read only new messages, pass the last seen ID as --after next time. Mentions appear as <@name>. Attachments are filenames; fetch them with attachment download."`
 	Get    MessageGetCmd    `cmd:"" help:"Get one message."`
-	Send   MessageSendCmd   `cmd:"" help:"Send a message. Text over 2000 characters is sent as message.txt."`
-	Edit   MessageEditCmd   `cmd:"" help:"Edit a message sent by the bot."`
+	Send   MessageSendCmd   `cmd:"" help:"Send a message and print its id. Text over 2000 characters is sent as message.txt."`
+	Edit   MessageEditCmd   `cmd:"" help:"Replace the text of a message sent by the bot and print its id."`
 	Delete MessageDeleteCmd `cmd:"" help:"Delete a message."`
 }
 
@@ -102,6 +102,7 @@ type MessageSendCmd struct {
 	TextInput `embed:""`
 	File      []string `help:"Attach a file. Repeatable." type:"existingfile" placeholder:"PATH"`
 	ReplyTo   string   `help:"Reply to this message ID." placeholder:"MESSAGE_ID"`
+	Mention   []string `help:"Mention a user by name, as in author.name or <@name> (quote names with spaces). Repeatable. Writing @name or <@name> in --text does not mention." placeholder:"NAME"`
 }
 
 func (c *MessageSendCmd) Run() error {
@@ -109,7 +110,11 @@ func (c *MessageSendCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	data, fallback, err := buildMessage(text, c.File)
+	prefix, err := mentionPrefix(c.Mention)
+	if err != nil {
+		return err
+	}
+	data, fallback, err := buildMessage(prefix, text, c.File)
 	if err != nil {
 		return err
 	}
@@ -124,22 +129,20 @@ func (c *MessageSendCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	out := toMessage(m)
-	out.Fallback = fallback
-	return emit(out)
+	return emit(Sent{ID: m.ID, Fallback: fallback})
 }
 
-// buildMessage turns text and file paths into a send request. Text longer
-// than the Discord limit becomes a message.txt attachment, and fallback is
-// set to "attachment".
-func buildMessage(text string, paths []string) (*discordgo.MessageSend, string, error) {
+// buildMessage turns mentions, text and file paths into a send request.
+// Text that does not fit the Discord limit becomes a message.txt attachment
+// (fallback is "attachment"); mentions stay in the content so they still ping.
+func buildMessage(mentions, text string, paths []string) (*discordgo.MessageSend, string, error) {
 	if text == "" && len(paths) == 0 {
 		return nil, "", errors.New("nothing to send: give --text, --stdin or --file")
 	}
-	data := &discordgo.MessageSend{Content: text}
+	data := &discordgo.MessageSend{Content: mentions + text}
 	fallback := ""
-	if utf8.RuneCountInString(text) > maxContent {
-		data.Content = ""
+	if utf8.RuneCountInString(data.Content) > maxContent {
+		data.Content = mentions
 		data.Files = append(data.Files, &discordgo.File{
 			Name: "message.txt", ContentType: "text/plain; charset=utf-8", Reader: strings.NewReader(text),
 		})
@@ -160,6 +163,7 @@ func buildMessage(text string, paths []string) (*discordgo.MessageSend, string, 
 type MessageEditCmd struct {
 	msgRef
 	TextInput `embed:""`
+	Mention   []string `help:"Mention a user by name. Needed again on edit: <@name> in the old text is not kept." placeholder:"NAME"`
 }
 
 func (c *MessageEditCmd) Run() error {
@@ -170,6 +174,11 @@ func (c *MessageEditCmd) Run() error {
 	if text == "" {
 		return errors.New("give --text or --stdin")
 	}
+	prefix, err := mentionPrefix(c.Mention)
+	if err != nil {
+		return err
+	}
+	text = prefix + text
 	if n := utf8.RuneCountInString(text); n > maxContent {
 		return fmt.Errorf("text is %d characters; edit allows at most %d", n, maxContent)
 	}
@@ -181,7 +190,7 @@ func (c *MessageEditCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	return emit(toMessage(m))
+	return emit(Sent{ID: m.ID})
 }
 
 type MessageDeleteCmd struct{ msgRef }

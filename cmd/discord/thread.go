@@ -72,7 +72,7 @@ func (c *ThreadCreateCmd) Run() error {
 	var data *discordgo.MessageSend
 	var fallback string
 	if text != "" {
-		if data, fallback, err = buildMessage(text, nil); err != nil {
+		if data, fallback, err = buildMessage("", text, nil); err != nil {
 			return err
 		}
 	}
